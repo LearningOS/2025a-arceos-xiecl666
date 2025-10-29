@@ -21,7 +21,7 @@ mod macros;
 mod imp;
 
 pub use axerrno::{AxError, AxResult};
-
+pub use axhal::misc::random;
 /// Platform-specific constants and parameters.
 pub mod config {
     pub use axconfig::*;
