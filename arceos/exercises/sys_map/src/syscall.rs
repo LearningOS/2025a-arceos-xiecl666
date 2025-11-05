@@ -8,6 +8,7 @@ use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
+use memory_addr::AddrRange;
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -140,7 +141,47 @@ fn sys_mmap(
     fd: i32,
     _offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    //unimplemented!("no sys_mmap!");
+	syscall_body!(sys_mmap,{
+		use axhal::mem::{VirtAddr, PAGE_SIZE_4K, MemoryAddr};
+		use axstd::vec;
+		let p=MmapProt::from_bits(prot).ok_or(LinuxError::EINVAL)?;
+		let f=MmapFlags::from_bits(flags).ok_or(LinuxError::EINVAL)?;
+		let aligned_length = (length + PAGE_SIZE_4K - 1) & !(PAGE_SIZE_4K - 1);
+		//找到当前任务的地址空间
+		let tk=current();
+		let mut addrspace=tk.task_ext().aspace.lock();
+		//在地址空间找个可以分配的位置
+		let start_addr=if addr.is_null(){
+			let hint=VirtAddr::from(0);
+			let limit= AddrRange::from_start_size(addrspace.base(), addrspace.size());
+			addrspace.find_free_area(hint,aligned_length,limit).ok_or(LinuxError::ENOMEM)?
+		}
+		else{
+			VirtAddr::from(addr as usize)
+		};
+		let mapping_ports=MappingFlags::from(p);
+		//建立映射分配
+		addrspace.map_alloc(start_addr, aligned_length, mapping_ports, true);
+		if !f.contains(MmapFlags::MAP_ANONYMOUS){
+			if fd<0{
+				return Err(LinuxError::EBADF);
+			}
+			//读取文件内容
+			if _offset>0{
+				let res=api::sys_lseek(fd, _offset as i64, 0);
+				if res<0{
+					return Err(LinuxError::EIO);
+				}
+			}
+			let mut file_data = vec![0u8; length];
+			let n=api::sys_read(fd, file_data.as_mut_ptr() as *mut c_void, length);
+			//写到内存映射区域
+			addrspace.write(start_addr, &file_data[..n as usize]);
+
+		}
+		Ok(start_addr.as_usize())
+	})
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
