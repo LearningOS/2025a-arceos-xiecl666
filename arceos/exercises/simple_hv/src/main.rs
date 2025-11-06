@@ -93,7 +93,8 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
                         assert_eq!(a0, 0x6688);
                         assert_eq!(a1, 0x1234);
                         ax_println!("Shutdown vm normally!");
-                        return true;
+                        ctx.guest_regs.sepc += 4;
+						return true;
                     },
                     _ => todo!(),
                 }
@@ -106,12 +107,16 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
                 stval::read(),
                 ctx.guest_regs.sepc
             );
+			ctx.guest_regs.gprs.set_reg(A0, 0x6688);
+			ctx.guest_regs.sepc+=4;
         },
         Trap::Exception(Exception::LoadGuestPageFault) => {
             panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",
                 stval::read(),
                 ctx.guest_regs.sepc
             );
+			ctx.guest_regs.gprs.set_reg(A1, 0x1234);
+			ctx.guest_regs.sepc+=4;
         },
         _ => {
             panic!(

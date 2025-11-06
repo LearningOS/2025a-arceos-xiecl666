@@ -11,14 +11,18 @@ rm disk.img
 
 make pflash_img
 make disk_img
+make build
 
 make payload
 ./update_disk.sh payload/skernel2/skernel2
 
-make run A=exercises/simple_hv/ BLK=y | tee $tmp_file
+# make run A=exercises/simple_hv/ BLK=y | tee $tmp_file
 
-output=$(grep -a "$grep_content" $tmp_file | tail -n1  )
+# output=$(grep -a "$grep_content" $tmp_file | tail -n1  )
+output_content=$(timeout 60 bash -c '(while true; do printf " \n"; sleep 0.1; done) 2>/dev/null | make run A=exercises/simple_hv/ BLK=y 2>/dev/null')
+echo "$output_content" | tee $tmp_file
 
+output=$(echo "$output_content" | grep -a "$grep_content" | tail -n1)
 rm -rf $tmp_file 
 
 if [[ -z "$output" ]]; then
